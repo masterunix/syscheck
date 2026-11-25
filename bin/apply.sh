@@ -48,7 +48,7 @@ else
 fi
 
 # --- login banner -------------------------------------------------------------
-if [ "${SC_MOTD:-on}" = "on" ] && [ -d /etc/update-motd.d ]; then
+if [ "${SC_BANNER:-on}" = "on" ] && [ -d /etc/update-motd.d ]; then
   install -m 0755 -o root -g root "$SC_PREFIX/etc/99-syscheck" /etc/update-motd.d/99-syscheck
 else
   rm -f /etc/update-motd.d/99-syscheck

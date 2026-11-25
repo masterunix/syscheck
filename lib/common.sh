@@ -5,18 +5,20 @@
 SC_PREFIX="${SC_PREFIX:-/opt/syscheck}"
 SC_ETC="${SC_ETC:-/etc/syscheck}"
 SC_VAR="${SC_VAR:-/var/lib/syscheck}"
-SC_RUNS="$SC_VAR/runs"
-SC_STATE="$SC_VAR/state.json"
-SC_MOTD="$SC_VAR/motd"
-SC_HISTORY="$SC_VAR/history.tsv"
-SC_LATEST="$SC_VAR/latest"
-SC_VERSION="$(cat "$SC_PREFIX/VERSION" 2>/dev/null || echo dev)"
 
 # Configuration: shipped defaults first, then this machine's own settings.
 # The per-host file lives outside the program directory so an upgrade, which
 # replaces /opt/syscheck wholesale, can never overwrite or leak it.
 [ -f "$SC_PREFIX/etc/syscheck.conf" ] && . "$SC_PREFIX/etc/syscheck.conf"
 [ -f "$SC_ETC/syscheck.conf" ]        && . "$SC_ETC/syscheck.conf"
+
+# Paths are fixed after the settings are read, so no setting can move them.
+SC_RUNS="$SC_VAR/runs"
+SC_STATE="$SC_VAR/state.json"
+SC_MOTD="$SC_VAR/motd"
+SC_HISTORY="$SC_VAR/history.tsv"
+SC_LATEST="$SC_VAR/latest"
+SC_VERSION="$(cat "$SC_PREFIX/VERSION" 2>/dev/null || echo dev)"
 
 # The account that owns the Claude login and the audio session. Empty in the
 # config means: the first ordinary login account on this machine.

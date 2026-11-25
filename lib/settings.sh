@@ -20,7 +20,7 @@ disk|SC_DISK|disk|disk to check (auto = the root filesystem's disk)
 services|SC_WATCH_SERVICES|services|services whose errors are read (default = built-in list)
 alarm|SC_ALARM|onoff|sound an alarm when a fault looks imminent
 alarm-seconds|SC_ALARM_SECONDS|int:10:3600|how long the alarm sounds, seconds
-motd|SC_MOTD|onoff|show the result on the SSH login banner
+motd|SC_BANNER|onoff|show the result on the SSH login banner
 keep-runs|SC_KEEP_RUNS|int:1:1000|how many runs to keep on disk
 lookback-days|SC_MAX_LOOKBACK_DAYS|int:1:90|furthest back the journal scan reaches
 repo|SC_REPO|repo|GitHub repository that upgrades come from

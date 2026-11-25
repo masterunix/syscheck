@@ -51,6 +51,13 @@ test "$(syscheck get model)" = haiku
 syscheck note | grep -q "ci note"
 grep -qE '^30 4 ' /etc/cron.d/syscheck
 
+# the banner hook follows its setting, and no stray files appear
+sudo syscheck set motd off
+test ! -e /etc/update-motd.d/99-syscheck
+sudo syscheck set motd on
+test -x /etc/update-motd.d/99-syscheck
+test ! -e on && test ! -e /on && test ! -e /opt/on
+
 # turning the schedule off removes the cron entry
 sudo syscheck set enabled off
 test ! -e /etc/cron.d/syscheck

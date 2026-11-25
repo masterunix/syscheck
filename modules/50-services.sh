@@ -13,8 +13,8 @@ mod_services() {
   sc_sh "$L" "boot time breakdown" 'systemd-analyze 2>/dev/null; echo; systemd-analyze blame 2>/dev/null | head -12'
 
   local failed_count failed_list
-  failed_count=$(sc_num "$(systemctl --failed --no-pager --no-legend 2>/dev/null | grep -c .)")
-  failed_list=$(systemctl --failed --no-pager --no-legend 2>/dev/null | awk '{print $1}' | paste -sd', ' -)
+  failed_count=$(sc_num "$(systemctl --failed --no-pager --no-legend --plain 2>/dev/null | grep -c .)")
+  failed_list=$(systemctl --failed --no-pager --no-legend --plain 2>/dev/null | awk '{print $1}' | paste -sd', ' -)
   sc_metric "failed_units" "$failed_count"
   [ "${failed_count:-0}" -gt 0 ] && sc_finding major services "$failed_count systemd unit(s) in failed state: $failed_list"
 
