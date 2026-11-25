@@ -2,6 +2,14 @@
 
 ## 0.2.1
 
+- **One-line install and upgrade**: `curl -fsSL .../releases/latest/download/get.sh | sudo bash`
+  sets up a new machine or upgrades any existing install, 0.1 included. It
+  verifies the release checksum and leaves nothing behind on the machine.
+- **Several machines**: `tools/fleet.sh` shows every machine's version and
+  last result, upgrades the ones behind, and starts checks, over SSH from one
+  workstation. The list of machines stays in `~/.config/syscheck/hosts` there.
+- The PostgreSQL data size is read from the server's own `data_directory`
+  instead of a path that assumed version 16.
 - **Fix: `syscheck run` from a terminal hung forever at the Claude stage,
   and Ctrl-C could not stop it.** The Claude CLI inherited the terminal as
   stdin while `timeout` ran it in a background process group, so the kernel

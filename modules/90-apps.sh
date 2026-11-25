@@ -31,8 +31,10 @@ mod_apps() {
     sc_sh "$L" "postgres status" 'pg_isready 2>&1'
     sc_sh "$L" "postgres errors" \
       "journalctl -u ${SC_PG_UNIT:-postgresql} --since '$since' --no-pager -o cat 2>/dev/null | grep -iE 'error|fatal|panic|could not|deadlock|corrupt' || echo none"
+    # Ask the server where its data lives. The path carries the major version
+    # on Debian and Ubuntu (/var/lib/postgresql/18/main) and differs on Arch.
     sc_sh "$L" "postgres data size" \
-      'du -sh /var/lib/postgresql/16/main 2>/dev/null || echo unreadable'
+      'd=$(su - postgres -c "psql -tAc \"show data_directory\"" 2>/dev/null); [ -n "$d" ] || d=$(ls -d /var/lib/postgresql/*/main /var/lib/postgres/data 2>/dev/null | sort -V | tail -1); if [ -n "$d" ]; then du -sh "$d" 2>/dev/null || echo "unreadable: $d"; else echo "data directory not found"; fi'
     if [ "$(id -u)" = "0" ]; then
       sc_sh "$L" "postgres databases" \
         'su - postgres -c "psql -tAc \"select datname, pg_size_pretty(pg_database_size(datname)) from pg_database where not datistemplate order by pg_database_size(datname) desc;\"" 2>/dev/null || echo unavailable'

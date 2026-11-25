@@ -33,15 +33,26 @@ While a run is in progress the banner says so and updates live, and the
 ## Install
 
 Any systemd Linux; packages are installed automatically on Debian, Ubuntu
-and Arch (including Omarchy). Download a release, check it, install it:
+and Arch (including Omarchy). On the machine:
+
+```sh
+curl -fsSL https://github.com/masterunix/syscheck/releases/latest/download/get.sh | sudo bash
+```
+
+`get.sh` downloads the latest release and its `SHA256SUMS`, refuses to install
+on a mismatch, runs the release's `install.sh`, and leaves nothing behind. The
+same line upgrades an existing install of any version, keeping its settings
+and history. Options go after `bash -s --`, for example
+`| sudo bash -s -- --user alice` or `--version 0.2.1`.
+
+To do the same by hand:
 
 ```sh
 V=0.2.1
 curl -fLO https://github.com/masterunix/syscheck/releases/download/v$V/syscheck-$V.tar.gz
 curl -fLO https://github.com/masterunix/syscheck/releases/download/v$V/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-tar -xzf syscheck-$V.tar.gz && cd syscheck-$V
-sudo ./install.sh
+tar -xzf syscheck-$V.tar.gz && sudo syscheck-$V/install.sh
 ```
 
 The installer adds `smartmontools`, `lm-sensors`, `sysstat`, `jq`, `bc` and
@@ -137,9 +148,35 @@ An upgrade downloads the release tarball and its `SHA256SUMS`, refuses to
 install on a mismatch, and replaces `/opt/syscheck` as a whole. Settings in
 `/etc/syscheck` and history in `/var/lib/syscheck` are kept as they are.
 
-Upgrading from a version before 0.2 (settings inside `/opt/syscheck/etc`):
-run the new `install.sh` once; it moves your changed settings to
-`/etc/syscheck/syscheck.conf`.
+From a version before 0.2, which has no `syscheck upgrade`, use the
+`get.sh` line from [Install](#install). It moves changed settings from
+`/opt/syscheck/etc` to `/etc/syscheck/syscheck.conf` and replaces the old cron
+job with the systemd timer.
+
+## Several machines
+
+`tools/fleet.sh` looks after every machine from one workstation over SSH. List
+the machines once, one SSH destination per line (aliases from `~/.ssh/config`
+work):
+
+```sh
+mkdir -p ~/.config/syscheck
+printf '%s\n' web-1 nas pi@backup-box >> ~/.config/syscheck/hosts
+```
+
+Then, from a clone of this repository:
+
+```sh
+tools/fleet.sh                  # version and last result of every machine
+tools/fleet.sh upgrade          # bring every machine to the latest release
+tools/fleet.sh run              # start a check on every machine now
+tools/fleet.sh upgrade nas      # or just some of them
+```
+
+`upgrade` skips machines that are already current and runs the same `get.sh`
+line on the rest, asking for each one's sudo password. A new machine joins by
+being added to the hosts file and upgraded. The hosts file stays on the
+workstation; nothing about the machines goes into the repository.
 
 ## Uninstalling
 

@@ -10,9 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Syntax
-        run: for f in install.sh bin/* lib/*.sh modules/*.sh tools/*.sh; do bash -n "$f"; done
+        run: for f in install.sh get.sh bin/* lib/*.sh modules/*.sh tools/*.sh; do bash -n "$f"; done
       - name: ShellCheck (errors only)
-        run: shellcheck --severity=error --shell=bash install.sh bin/* lib/*.sh modules/*.sh tools/*.sh
+        run: shellcheck --severity=error --shell=bash install.sh get.sh bin/* lib/*.sh modules/*.sh tools/*.sh
       - name: No host data in the repository
         run: tools/check-no-host-data.sh
 

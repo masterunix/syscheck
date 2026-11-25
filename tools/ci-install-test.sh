@@ -105,4 +105,14 @@ test ! -e /etc/syscheck
 test ! -e /etc/sudoers.d/99-syscheck
 test ! -e /usr/local/bin/syscheck
 test ! -e /etc/systemd/system/syscheck.timer
+
+# The one-line installer, fed through stdin the way `curl | sudo bash` does,
+# against the latest published release. It verifies, installs, cleans up.
+latest="$(curl -fsSL https://github.com/masterunix/syscheck/releases/latest/download/SHA256SUMS \
+  | grep -oE 'syscheck-[0-9][0-9A-Za-z.+-]*\.tar\.gz' | head -1 | sed 's/^syscheck-//; s/\.tar\.gz$//')"
+sudo bash < get.sh || echo "install reported failed checks (expected on a VM without SMART)"
+test "$(cat /opt/syscheck/VERSION)" = "$latest"
+test -x /usr/local/bin/syscheck
+if ls -d /var/tmp/syscheck-get.* 2>/dev/null; then exit 1; fi
+sudo syscheck uninstall --purge </dev/null
 echo "install test passed"

@@ -15,15 +15,17 @@ jobs:
         run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
       - name: Checks
         run: |
-          for f in install.sh bin/* lib/*.sh modules/*.sh tools/*.sh; do bash -n "$f"; done
-          shellcheck --severity=error --shell=bash install.sh bin/* lib/*.sh modules/*.sh tools/*.sh
+          for f in install.sh get.sh bin/* lib/*.sh modules/*.sh tools/*.sh; do bash -n "$f"; done
+          shellcheck --severity=error --shell=bash install.sh get.sh bin/* lib/*.sh modules/*.sh tools/*.sh
           tools/check-no-host-data.sh
       - name: Build
         run: |
           V="$(cat VERSION)"
           mkdir dist
           git archive --format=tar.gz --prefix="syscheck-$V/" -o "dist/syscheck-$V.tar.gz" HEAD
-          (cd dist && sha256sum "syscheck-$V.tar.gz" > SHA256SUMS && cat SHA256SUMS)
+          # get.sh is the one-line installer: .../releases/latest/download/get.sh
+          install -m 0755 get.sh dist/get.sh
+          (cd dist && sha256sum "syscheck-$V.tar.gz" get.sh > SHA256SUMS && cat SHA256SUMS)
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
