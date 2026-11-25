@@ -36,7 +36,7 @@ Any systemd Linux; packages are installed automatically on Debian, Ubuntu
 and Arch (including Omarchy). Download a release, check it, install it:
 
 ```sh
-V=0.2.0
+V=0.2.1
 curl -fLO https://github.com/masterunix/syscheck/releases/download/v$V/syscheck-$V.tar.gz
 curl -fLO https://github.com/masterunix/syscheck/releases/download/v$V/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
@@ -255,6 +255,7 @@ sudo syscheck set alarm off     # never sound it
 - **The banner never lies.** The rules produce a verdict before Claude runs, so
   a timeout or crash still leaves the real state on screen.
 - **Runs cannot pile up**, and every probe and module has its own timeout.
+  Ctrl-C (or `systemctl stop syscheck`) stops a run and everything it started.
 
 ## Commands
 

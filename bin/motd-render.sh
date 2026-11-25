@@ -65,6 +65,7 @@ case "$phase" in
     ;;
   failed)   status="${RED}Did not complete${R} (${updated_clock}) - the check itself failed" ;;
   timeout)  status="${YEL}Timed out${R} (${updated_clock}) - analysis was cut short; collected data is intact" ;;
+  stopped)  status="${YEL}Stopped${R} (${updated_clock}, ${date_s}) - interrupted before it finished" ;;
   *)        status="${DIM}No run recorded yet${R}" ;;
 esac
 
@@ -82,7 +83,7 @@ wrap() {  # wrap <label> <text>
         'NR==1{print pre $0; next}{print ind $0}'
 }
 if [ -n "$msg" ]; then
-  if [ "$source" = "rules" ]; then wrap "Message" "$msg"; else wrap "Claude Message" "$msg"; fi
+  if [ "$source" = "claude" ]; then wrap "Claude Message" "$msg"; else wrap "Message" "$msg"; fi
 fi
 # The owner's own line, set with `syscheck note "..."`.
 [ -n "$note" ] && wrap "Note" "$note"

@@ -26,11 +26,22 @@ command -v claude >/dev/null || {
   echo "Claude Code is not installed for $SC_USER. Run: syscheck claude install" > "$SC_RUN_DIR/claude-problem.txt"
   echo "claude CLI not found in PATH" >&2; exit 127; }
 
+# Every claude call gets /dev/null as stdin. Under `timeout` it runs in a
+# background process group, and when it touches a terminal there the kernel
+# stops it (and the timeout with it) forever. run.sh does this for the whole
+# run; it is repeated here so the script is safe on its own.
+
 # A run that cannot authenticate should say so on the banner, not just fail.
-if command -v jq >/dev/null && \
-   [ "$(timeout 30 claude auth status --json 2>/dev/null | jq -r '.loggedIn // false' 2>/dev/null)" != "true" ]; then
-  echo "Claude is not logged in for $SC_USER. Run: syscheck claude login" > "$SC_RUN_DIR/claude-problem.txt"
-  echo "claude is not logged in" >&2; exit 126
+if command -v jq >/dev/null; then
+  auth="$(timeout -k 5 30 claude auth status --json </dev/null 2>/dev/null)"; auth_rc=$?
+  if [ "$auth_rc" = "124" ] || [ "$auth_rc" = "137" ]; then
+    echo "Claude did not answer its login check within 30 seconds. Try: syscheck claude test" > "$SC_RUN_DIR/claude-problem.txt"
+    echo "claude auth status timed out" >&2; exit 124
+  fi
+  if [ "$(printf '%s' "$auth" | jq -r '.loggedIn // false' 2>/dev/null)" != "true" ]; then
+    echo "Claude is not logged in for $SC_USER. Run: syscheck claude login" > "$SC_RUN_DIR/claude-problem.txt"
+    echo "claude is not logged in" >&2; exit 126
+  fi
 fi
 
 # --- build the orientation file Claude opens first ----------------------
@@ -110,7 +121,7 @@ timeout -k 60 "$TIMEOUT" claude -p "$PROMPT" \
   --max-budget-usd "$BUDGET" \
   --output-format json \
   --no-session-persistence \
-  > "$SC_RUN_DIR/claude-output.json" 2> "$SC_RUN_DIR/claude-stderr.log"
+  < /dev/null > "$SC_RUN_DIR/claude-output.json" 2> "$SC_RUN_DIR/claude-stderr.log"
 rc=$?
 
 # Pull the useful bits out of the result envelope for the run log.

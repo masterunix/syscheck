@@ -60,6 +60,41 @@ sudo syscheck set motd on
 test -x /etc/update-motd.d/99-syscheck
 test ! -e on && test ! -e /on && test ! -e /opt/on
 
+# `syscheck run` from a terminal, with the analysis. A stand-in claude reads its
+# stdin like the real CLI does; when that was the terminal, the kernel stopped
+# it under `timeout` and the run hung forever.
+sudo syscheck set analysis on
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/claude <<'C'
+#!/usr/bin/env bash
+read -r -t 1 _ || true
+case "$1" in
+  auth)      echo '{"loggedIn": true}' ;;
+  --version) echo "0.0.0 (stand-in)" ;;
+  -p)        if [ -f /tmp/sc-slow-claude ]; then sleep 300; fi
+             echo '{"severity":"none","imminent_failure":false,"motd_message":"stand-in verdict","headline":"ok","confidence":"high"}' > verdict.json
+             echo '{"result":"ok","total_cost_usd":0,"usage":{}}' ;;
+esac
+C
+chmod +x ~/.local/bin/claude
+timeout 900 script -qec "syscheck run" /dev/null > /tmp/sc-run.out
+grep -q '"verdict_source": "claude"' /var/lib/syscheck/state.json
+grep -q 'stand-in verdict' /var/lib/syscheck/motd
+
+# Ctrl-C in the middle of the analysis stops the run and everything it
+# started. It is typed into the terminal, as a person would: a signal sent to
+# a background job arrives already ignored and would prove nothing.
+touch /tmp/sc-slow-claude
+( for _ in $(seq 1 600); do pgrep -f 'claude -p' >/dev/null && { touch /tmp/sc-reached; break; }; sleep 1; done
+  sleep 3; printf '\003'
+  for _ in $(seq 1 30); do pgrep -f '/opt/syscheck/bin/run.sh|claude -p' >/dev/null || break; sleep 1; done
+) | timeout 900 script -qec "syscheck run" /dev/null > /tmp/sc-run2.out
+test -f /tmp/sc-reached
+if pgrep -fa '/opt/syscheck/bin/run.sh|claude -p'; then exit 1; fi
+grep -q '"phase": "stopped"' /var/lib/syscheck/state.json
+rm -f /tmp/sc-slow-claude /tmp/sc-reached ~/.local/bin/claude
+sudo syscheck set analysis off
+
 # turning the schedule off disables the timer
 sudo syscheck set enabled off
 if systemctl is-enabled --quiet syscheck.timer; then exit 1; fi

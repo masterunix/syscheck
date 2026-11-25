@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.1
+
+- **Fix: `syscheck run` from a terminal hung forever at the Claude stage,
+  and Ctrl-C could not stop it.** The Claude CLI inherited the terminal as
+  stdin while `timeout` ran it in a background process group, so the kernel
+  stopped it on its first touch of the terminal, and stopped the `timeout`
+  meant to kill it along with it. Runs now give every command `/dev/null` as
+  stdin. Scheduled runs, which have no terminal, were not affected.
+- **Ctrl-C works**, as do `systemctl stop` and a dropped SSH session: the run
+  stops everything it started and the banner says "Stopped" instead of being
+  left on "Claude is reviewing".
+- The alarm and the analysis no longer inherit the run lock, which kept a new
+  run from starting while an alarm was still sounding.
+- A login check that does not answer is reported as such, not as "not logged in".
+
 ## 0.2.0
 
 First public release. syscheck now installs on any Ubuntu or Debian machine

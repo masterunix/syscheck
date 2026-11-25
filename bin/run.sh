@@ -10,6 +10,13 @@ set -uo pipefail
 SC_PREFIX="${SC_PREFIX:-/opt/syscheck}"
 . "$SC_PREFIX/lib/common.sh"
 
+# Nothing in a run reads input. Started from a terminal (`syscheck run`), stdin
+# would be that terminal, while every probe and the Claude CLI run under
+# `timeout`, which puts them in a process group of their own. A program that
+# touches the terminal from there is stopped by the kernel, together with the
+# `timeout` meant to kill it, and the run hangs for good. The Claude CLI does.
+exec </dev/null
+
 export SC_PREFIX
 SC_STARTED="$(sc_now)"
 SC_STARTED_CLOCK="$(sc_clock)"
@@ -45,13 +52,37 @@ if ! flock -n 9; then
 fi
 
 FINALIZED=0
+STOPPED_BY=""
 finalize_failure() {
   [ "$FINALIZED" = "1" ] && return 0
-  sc_state_write "failed" "major" \
-    "The nightly system check did not finish. Collected data is in $SC_RUN_DIR — check 00-run.log."
-  sc_log "run aborted before completion"
+  if [ -n "$STOPPED_BY" ]; then
+    sc_state_write "stopped" "${RULE_SEV:-unknown}" \
+      "The check was stopped before it finished${RULE_SUMMARY:+. Rules so far: $RULE_SUMMARY}"
+    sc_log "run stopped by SIG$STOPPED_BY"
+  else
+    sc_state_write "failed" "major" \
+      "The nightly system check did not finish. Collected data is in $SC_RUN_DIR — check 00-run.log."
+    sc_log "run aborted before completion"
+  fi
 }
 trap finalize_failure EXIT
+
+# Ctrl-C, `systemctl stop`, a dropped SSH session. `timeout` keeps the
+# terminal's Ctrl-C from reaching what it runs, so the long stages run in the
+# background where `wait` can be interrupted, and a signal stops every process
+# this run started, parents first so nothing spawns a replacement.
+descendants() { local c; for c in $(pgrep -P "$1" 2>/dev/null); do echo "$c"; descendants "$c"; done; }
+on_signal() {
+  trap - INT TERM HUP
+  STOPPED_BY="$1"
+  local pids; pids="$(descendants $$)"
+  # shellcheck disable=SC2086
+  [ -n "$pids" ] && kill -TERM $pids 2>/dev/null
+  exit 130
+}
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
+trap 'on_signal HUP' HUP
 
 # ---------------------------------------------------------------- stage 1
 sc_state_write "running" "none" ""
@@ -59,7 +90,8 @@ sc_log "=== syscheck run $RUN_ID starting ==="
 sc_log "stage 1/4: collecting"
 
 # collect.sh logs each line to 00-run.log itself; keep only its errors here.
-"$SC_PREFIX/bin/collect.sh" > /dev/null 2>> "$SC_RUN_DIR/00-run.log"
+"$SC_PREFIX/bin/collect.sh" > /dev/null 2>> "$SC_RUN_DIR/00-run.log" &
+wait $!
 sc_log "stage 1 finished (rc=$?)"
 
 # ---------------------------------------------------------------- stage 2
@@ -78,7 +110,8 @@ sc_state_write "analyzing" "$RULE_SEV" \
 # A drive failing this hard should not wait for an LLM to agree.
 if [ "${RULE_IMMINENT:-0}" -gt 0 ] && [ "${SC_ALARM:-on}" = "on" ]; then
   sc_log "rules flagged an IMMINENT fault — sounding the alarm without waiting for Claude"
-  "$SC_PREFIX/bin/alarm.sh" start "${SC_ALARM_SECONDS:-600}" >> "$SC_RUN_DIR/00-run.log" 2>&1 &
+  # 9>&-: the alarm outlives the run and must not keep holding its lock.
+  "$SC_PREFIX/bin/alarm.sh" start "${SC_ALARM_SECONDS:-600}" >> "$SC_RUN_DIR/00-run.log" 2>&1 9>&- &
 fi
 
 # ---------------------------------------------------------------- stage 3
@@ -87,7 +120,8 @@ if [ "$NO_ANALYSIS" = "1" ]; then
   sc_log "stage 3/4: skipped (analysis is off for this run)"
 else
   sc_log "stage 3/4: Claude analysis (hard timeout ${SC_CLAUDE_TIMEOUT:-3600}s)"
-  "$SC_PREFIX/bin/analyze.sh" >> "$SC_RUN_DIR/00-run.log" 2>&1 || CLAUDE_RC=$?
+  "$SC_PREFIX/bin/analyze.sh" >> "$SC_RUN_DIR/00-run.log" 2>&1 9>&- &
+  wait $! || CLAUDE_RC=$?
 fi
 [ -f "$SC_RUN_DIR/claude-stats.txt" ] && sc_log "claude: $(head -1 "$SC_RUN_DIR/claude-stats.txt")"
 sc_log "stage 3 finished (rc=$CLAUDE_RC)"
@@ -139,7 +173,7 @@ fi
 # Alarm on Claude's call, if the rules had not already fired.
 if [ "${FINAL_IMMINENT:-0}" -gt 0 ] && [ "${RULE_IMMINENT:-0}" -eq 0 ] && [ "${SC_ALARM:-on}" = "on" ]; then
   sc_log "claude flagged IMMINENT failure — sounding the alarm"
-  "$SC_PREFIX/bin/alarm.sh" start "${SC_ALARM_SECONDS:-600}" >> "$SC_RUN_DIR/00-run.log" 2>&1 &
+  "$SC_PREFIX/bin/alarm.sh" start "${SC_ALARM_SECONDS:-600}" >> "$SC_RUN_DIR/00-run.log" 2>&1 9>&- &
 fi
 
 # --- usage ledger -------------------------------------------------------
