@@ -79,7 +79,7 @@ alarm_stop
 unmute
 
 # Detach into its own process group so the whole loop can be killed at once,
-# and so it outlives the cron job that triggered it.
+# and so it outlives the run that triggered it.
 setsid bash -c '
   end=$(( $(date +%s) + '"$DURATION"' ))
   while [ "$(date +%s)" -lt "$end" ]; do

@@ -11,7 +11,9 @@ test -x /opt/syscheck/bin/syscheck
 test "$(cat /opt/syscheck/VERSION)" = "$(cat VERSION)"
 grep -q "^SC_USER=$me\$" /etc/syscheck/syscheck.conf
 test -s /etc/syscheck/machine.md
-grep -qE '^0 5 \* \* \* +root +/opt/syscheck/bin/run.sh' /etc/cron.d/syscheck
+grep -q '^OnCalendar=\*-\*-\* 05:00:00$' /etc/systemd/system/syscheck.timer
+systemctl is-enabled --quiet syscheck.timer
+test ! -e /etc/cron.d/syscheck
 sudo visudo -cf /etc/sudoers.d/99-syscheck
 test "$(stat -c %U:%a /var/lib/syscheck)" = "root:755"
 syscheck version
@@ -19,7 +21,7 @@ syscheck get
 
 # settings
 sudo syscheck set schedule 4:30
-grep -qE '^30 4 \* \* \*' /etc/cron.d/syscheck
+grep -q '^OnCalendar=\*-\*-\* 04:30:00$' /etc/systemd/system/syscheck.timer
 sudo syscheck set analysis off
 sudo syscheck set model haiku
 test "$(syscheck get model)" = haiku
@@ -49,7 +51,7 @@ git archive --prefix=syscheck-test/ -o /tmp/sc.tar.gz HEAD
 sudo syscheck upgrade --from /tmp/sc.tar.gz
 test "$(syscheck get model)" = haiku
 syscheck note | grep -q "ci note"
-grep -qE '^30 4 ' /etc/cron.d/syscheck
+grep -q '04:30:00' /etc/systemd/system/syscheck.timer
 
 # the banner hook follows its setting, and no stray files appear
 sudo syscheck set motd off
@@ -58,13 +60,14 @@ sudo syscheck set motd on
 test -x /etc/update-motd.d/99-syscheck
 test ! -e on && test ! -e /on && test ! -e /opt/on
 
-# turning the schedule off removes the cron entry
+# turning the schedule off disables the timer
 sudo syscheck set enabled off
-test ! -e /etc/cron.d/syscheck
+if systemctl is-enabled --quiet syscheck.timer; then exit 1; fi
 
 sudo syscheck uninstall --purge </dev/null
 test ! -e /opt/syscheck
 test ! -e /etc/syscheck
 test ! -e /etc/sudoers.d/99-syscheck
 test ! -e /usr/local/bin/syscheck
+test ! -e /etc/systemd/system/syscheck.timer
 echo "install test passed"

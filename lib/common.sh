@@ -28,9 +28,12 @@ sc_detect_user() {
 [ -n "${SC_USER:-}" ] || SC_USER="$(sc_detect_user)"
 SC_UID="$(id -u "$SC_USER" 2>/dev/null || echo 1000)"
 SC_HOME="$(getent passwd "$SC_USER" | cut -d: -f6)"; SC_HOME="${SC_HOME:-/home/$SC_USER}"
+# Where that account's Claude Code may live: the official installer, mise, npm.
+SC_USER_PATH="$SC_HOME/.local/bin:$SC_HOME/.local/share/mise/shims:$SC_HOME/.npm-global/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 
 # The disk to interrogate. Empty means the disk that holds the root filesystem.
-SC_ROOT_DEV="$(findmnt -no SOURCE / 2>/dev/null)"
+# -v drops a btrfs subvolume suffix such as [/@] from the device name.
+SC_ROOT_DEV="$(findmnt -nvo SOURCE / 2>/dev/null)"
 if [ -z "${SC_DISK:-}" ]; then
   # Walk up from the root filesystem (through LVM, LUKS or RAID) to a disk.
   _pk="$(lsblk -nrso NAME,TYPE "$SC_ROOT_DEV" 2>/dev/null | awk '$2=="disk"{print $1; exit}')"

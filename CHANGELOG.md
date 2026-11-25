@@ -15,6 +15,12 @@ instead of the one it was written for.
 - **Upgrades**: `syscheck upgrade` installs the latest GitHub release after
   checking its SHA-256 checksum; `--check`, a specific version, or `--from` a
   local archive. Settings and history are kept.
+- **Scheduling**: a systemd timer replaces cron, so a run missed while the
+  machine was off or asleep happens at the next boot.
+- **More distributions**: Arch (and Omarchy) as well as Debian and Ubuntu:
+  pacman packages and update checks, a profile.d banner where update-motd.d
+  is missing, btrfs roots (subvolumes, LUKS) with btrfs error counters, and
+  Claude Code installed through mise.
 - **Uninstall**: `syscheck uninstall`, with `--purge` to remove data too.
 - **Per-machine description**: `/etc/syscheck/machine.md` is generated from
   the machine's own hardware and edited by the owner; nothing about any one

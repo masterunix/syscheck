@@ -17,7 +17,7 @@ if [ "$(id -u)" = "0" ]; then
   exec setpriv --reuid="$SC_UID" --regid="$SC_UID" --init-groups \
     env HOME="$SC_HOME" USER="$SC_USER" \
         XDG_RUNTIME_DIR="/run/user/$SC_UID" \
-        PATH="$SC_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+        PATH="$SC_USER_PATH" \
         SC_PREFIX="$SC_PREFIX" SC_RUN_DIR="$SC_RUN_DIR" \
     "$0" "$@"
 fi
@@ -98,7 +98,7 @@ DENY=(WebFetch WebSearch Task
 unset SSH_AUTH_SOCK SSH_AGENT_PID
 
 # `dontAsk` never blocks on a permission prompt — anything outside allowedTools
-# is refused outright rather than hanging a 5 AM cron job forever.
+# is refused outright rather than hanging a scheduled run forever.
 timeout -k 60 "$TIMEOUT" claude -p "$PROMPT" \
   --model "$MODEL" \
   --effort "$EFFORT" \

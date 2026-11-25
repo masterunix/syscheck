@@ -42,6 +42,16 @@ mod_storage() {
     esac
   fi
 
+  # btrfs keeps its own per-device error counters; non-zero means real I/O
+  # or checksum failures, which btrfs found and could not always repair.
+  if [ "$(findmnt -no FSTYPE /)" = "btrfs" ] && command -v btrfs >/dev/null && [ "$(id -u)" = "0" ]; then
+    sc_sh "$L" "btrfs device error counters" 'btrfs device stats / 2>&1'
+    local berr
+    berr=$(btrfs device stats / 2>/dev/null | awk '$2 ~ /^[0-9]+$/ {s+=$2} END{print s+0}')
+    sc_metric "btrfs_errors" "$berr"
+    [ "${berr:-0}" -gt 0 ] && sc_finding major storage "btrfs reports $berr I/O, checksum or generation errors on the root filesystem (btrfs device stats /)"
+  fi
+
   # Read-only remount is the kernel's last-ditch response to write errors.
   if grep -qE ' / .*[( ,]ro[, )]' /proc/mounts; then
     sc_finding critical storage "Root filesystem has been remounted READ-ONLY - the kernel hit write errors" 1

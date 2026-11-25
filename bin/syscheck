@@ -18,7 +18,7 @@ need_root() { [ "$(id -u)" = "0" ] || exec sudo "$SC_PREFIX/bin/syscheck" "$cmd"
 
 # Run a command as the analysis account, where the Claude login lives.
 as_user() {
-  local path="$SC_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  local path="$SC_USER_PATH"
   if [ "$(id -un)" = "$SC_USER" ]; then
     env PATH="$path" "$@"
   elif [ "$(id -u)" = "0" ]; then
@@ -297,7 +297,9 @@ case "$cmd" in
     apply_settings ;;
 
   next)
-    if [ "${SC_ENABLED:-on}" = "on" ]; then echo "runs every day at $SC_SCHEDULE (root cron, /etc/cron.d/syscheck)"
+    if [ "${SC_ENABLED:-on}" = "on" ]; then
+      echo "runs every day at $SC_SCHEDULE (systemd timer; a run missed while the machine was off happens at the next boot)"
+      systemctl list-timers syscheck.timer --no-pager 2>/dev/null | head -2
     else echo "the scheduled run is off. Turn it on with: syscheck set enabled on"; fi ;;
 
   help|-h|--help)
@@ -318,7 +320,7 @@ syscheck $SC_VERSION: scheduled health check for this machine, reviewed by Claud
   syscheck grep <pattern>  search every archive from the last run
   syscheck runs            list recent runs
   syscheck runlog          verbose log of the last run
-  syscheck logs            follow the cron log
+  syscheck logs            follow the run log
 
   syscheck settings        interactive settings menu
   syscheck get [name]      show settings

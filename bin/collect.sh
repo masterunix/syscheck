@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gather everything into $SC_RUN_DIR. Runs as root from cron.
+# Gather everything into $SC_RUN_DIR. Runs as root, from run.sh.
 # Deliberately does NOT use `set -e`: one broken probe must never abort the
 # rest of the sweep.
 set -uo pipefail

@@ -28,7 +28,7 @@ mod_services() {
     [ "$n" = "0" ] && continue
     printf '%-45s %s restarts\n' "$u" "$n" >> "$R"
     if [ "$n" -gt "$churn" ]; then churn="$n"; worst="$u"; fi
-  done < <(systemctl list-units --type=service --state=running,failed --no-pager --no-legend 2>/dev/null | awk '{print $1}')
+  done < <(systemctl list-units --type=service --state=running,failed --no-pager --no-legend --plain 2>/dev/null | awk '{print $1}')
   [ "$churn" = "0" ] && echo "none" >> "$R"
   sc_metric "max_unit_restarts" "$churn"
   if   [ "${churn:-0}" -ge 20 ]; then sc_finding major services "$worst has restarted $churn times - it is in a crash loop"
@@ -38,7 +38,7 @@ mod_services() {
   # Per-service errors for the units that actually matter on this box.
   local S="$SC_RUN_DIR/52-service-logs.log"
   local svc
-  for svc in ${SC_WATCH_SERVICES:-ssh nginx docker ${SC_PG_UNIT:-postgresql} plexmediaserver ollama tailscaled cloudflared smbd cron systemd-timesyncd}; do
+  for svc in ${SC_WATCH_SERVICES:-ssh sshd nginx docker ${SC_PG_UNIT:-postgresql} plexmediaserver ollama tailscaled cloudflared smbd cron systemd-timesyncd}; do
     systemctl list-unit-files "${svc}.service" --no-pager --no-legend >/dev/null 2>&1 || continue
     systemctl cat "${svc}.service" >/dev/null 2>&1 || continue
     {

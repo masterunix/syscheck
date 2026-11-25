@@ -2,7 +2,7 @@
 
 A daily health check for a Linux machine, reviewed by Claude.
 
-Once a day a root cron job sweeps the system into log files (disk SMART data,
+Once a day a root systemd timer sweeps the system into log files (disk SMART data,
 temperatures, kernel and journal errors, services, Docker, network, security,
 updates) and applies threshold rules. Claude then investigates the results
 read-only and writes a report. The verdict lands on your SSH login banner, so
@@ -32,7 +32,8 @@ While a run is in progress the banner says so and updates live, and the
 
 ## Install
 
-Ubuntu or Debian with systemd. Download a release, check it, install it:
+Any systemd Linux; packages are installed automatically on Debian, Ubuntu
+and Arch (including Omarchy). Download a release, check it, install it:
 
 ```sh
 V=0.2.0
@@ -90,7 +91,7 @@ sudo syscheck set alarm off
 | `repo` | `masterunix/syscheck` | where `syscheck upgrade` gets releases |
 
 Settings are saved in `/etc/syscheck/syscheck.conf`. Changes take effect
-straight away: the cron entry, sudoers grant and banner hook are regenerated.
+straight away: the timer, sudoers grant and banner hook are regenerated.
 
 ### A note to yourself
 
@@ -173,7 +174,7 @@ another machine, to GitHub, or into a release.
 ## How a run works
 
 ```
-cron (root, daily at the scheduled time)
+systemd timer (root, daily; a run missed while off happens at next boot)
   │
   ├─ 1. collect ........ 11 modules sweep the system into NN-*.log files;
   │                      a SMART short self-test starts first, read at the end
@@ -288,9 +289,9 @@ syscheck help             everything else
   state.json, motd             current status and rendered banner
   history.tsv, usage.tsv       long-term metrics and token/cost ledger
   runs/YYYY-MM-DD_HHMMSS/      per-run logs, report.md, verdict.json
-/etc/cron.d/syscheck           generated from the schedule setting
+/etc/systemd/system/syscheck.{timer,service}   generated from the schedule
 /etc/sudoers.d/99-syscheck     generated for the analysis account
-/etc/update-motd.d/99-syscheck login banner hook
+/etc/update-motd.d/99-syscheck login banner (or /etc/profile.d/syscheck-banner.sh)
 /var/log/syscheck.log
 ```
 

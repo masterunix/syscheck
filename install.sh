@@ -51,14 +51,20 @@ if [ "$PACKAGES" = "1" ]; then
   command -v jq       >/dev/null || MISSING+=(jq)
   command -v bc       >/dev/null || MISSING+=(bc)
   command -v curl     >/dev/null || MISSING+=(curl)
-  command -v crontab  >/dev/null || [ -d /etc/cron.d ] || MISSING+=(cron)
   if [ ${#MISSING[@]} -gt 0 ]; then
     if command -v apt-get >/dev/null; then
       say "installing packages: ${MISSING[*]}"
       DEBIAN_FRONTEND=noninteractive apt-get update -qq
       DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${MISSING[@]}"
+    elif command -v pacman >/dev/null; then
+      # No -y: syncing the databases without a full upgrade is a partial
+      # upgrade, which Arch does not support. Install from the current sync.
+      PAC=("${MISSING[@]/lm-sensors/lm_sensors}")
+      say "installing packages: ${PAC[*]}"
+      pacman -S --needed --noconfirm "${PAC[@]}" || \
+        echo "${Y}pacman could not install them; run 'sudo pacman -Syu ${PAC[*]}' and install again${X}"
     else
-      echo "${Y}not a Debian/Ubuntu system: install these yourself: ${MISSING[*]}${X}"
+      echo "${Y}unknown package manager: install these yourself: ${MISSING[*]}${X}"
     fi
   fi
 fi
@@ -90,7 +96,7 @@ if [ ! -f "$ETC/syscheck.conf" ] && [ -f "$LEGACY" ] && [ ! -f "$PREFIX/VERSION"
       [ -n "$old" ] && [ "$old" != "$new" ] || continue
       # A disk setting that only names the root disk is better left automatic.
       if [ "$v" = "SC_DISK" ]; then
-        rootdisk="/dev/$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null | head -1)"
+        rootdisk="/dev/$(lsblk -nrso NAME,TYPE "$(findmnt -nvo SOURCE /)" 2>/dev/null | awk '$2=="disk"{print $1; exit}')"
         [ "$old" = "$rootdisk" ] && continue
       fi
       printf '%s=%q\n' "$v" "$old"
@@ -122,6 +128,7 @@ install -m 0644 "$SRC"/prompt/*.md          "$NEW/prompt/"
 install -m 0644 "$SRC"/share/*              "$NEW/share/"
 install -m 0644 "$SRC"/etc/syscheck.conf "$SRC"/etc/syscheck.sudoers "$SRC"/etc/syscheck.logrotate "$NEW/etc/"
 install -m 0755 "$SRC"/etc/99-syscheck      "$NEW/etc/"
+install -m 0644 "$SRC"/etc/syscheck-banner.sh "$NEW/etc/"
 install -m 0644 "$SRC"/VERSION              "$NEW/VERSION"
 chown -R root:root "$NEW"
 find "$NEW" -type d -exec chmod 0755 {} +
@@ -179,11 +186,11 @@ check() { if eval "$2" >/dev/null 2>&1; then ok "$1"; else bad "$1"; fi; }
 
 check "smartctl can read $SC_DISK"             "smartctl -i '$SC_DISK'"
 check "$USER_NAME can use the diagnostics wrapper" "runuser -u '$USER_NAME' -- sudo -n $PREFIX/bin/priv-read.sh smart-health"
-if [ "$SC_ENABLED" = "on" ]; then check "daily run scheduled at $SC_SCHEDULE" "grep -q run.sh /etc/cron.d/syscheck"; fi
+if [ "$SC_ENABLED" = "on" ]; then check "daily run scheduled at $SC_SCHEDULE" "systemctl is-enabled --quiet syscheck.timer"; fi
 check "syscheck command on PATH"               "test -x /usr/local/bin/syscheck"
 CLAUDE_OK=0
-if runuser -u "$USER_NAME" -- env HOME="$SC_HOME" PATH="$SC_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin" claude --version >/dev/null 2>&1; then
-  if [ "$(runuser -u "$USER_NAME" -- env HOME="$SC_HOME" PATH="$SC_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin" claude auth status --json 2>/dev/null | jq -r '.loggedIn // false')" = "true" ]; then
+if runuser -u "$USER_NAME" -- env HOME="$SC_HOME" PATH="$SC_USER_PATH" claude --version >/dev/null 2>&1; then
+  if [ "$(runuser -u "$USER_NAME" -- env HOME="$SC_HOME" PATH="$SC_USER_PATH" claude auth status --json 2>/dev/null | jq -r '.loggedIn // false')" = "true" ]; then
     ok "Claude Code is installed and logged in for $USER_NAME"; CLAUDE_OK=1
   else
     note "Claude Code is installed for $USER_NAME but not logged in"

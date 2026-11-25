@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nightly orchestrator. Runs as root from /etc/cron.d/syscheck at 05:00.
+# Orchestrator. Runs as root from syscheck.timer (daily, 05:00 by default).
 #
 #   collect -> rule-based verdict -> Claude analysis -> final verdict -> MOTD
 #

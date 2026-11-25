@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Remove syscheck.
 #
-#   uninstall.sh            remove the program, cron entry, sudoers grant and
+#   uninstall.sh            remove the program, timer, sudoers grant and
 #                           banner hook; keep settings and run history
 #   uninstall.sh --purge    also delete /etc/syscheck, /var/lib/syscheck and
 #                           the log
@@ -19,8 +19,11 @@ if [ -t 0 ]; then
 fi
 
 "$SC_PREFIX/bin/alarm.sh" stop >/dev/null 2>&1 || true
+systemctl disable --now --quiet syscheck.timer 2>/dev/null || true
+rm -f /etc/systemd/system/syscheck.timer /etc/systemd/system/syscheck.service
+systemctl daemon-reload 2>/dev/null || true
 rm -f /etc/cron.d/syscheck /etc/sudoers.d/99-syscheck /etc/update-motd.d/99-syscheck \
-      /etc/logrotate.d/syscheck /usr/local/bin/syscheck
+      /etc/profile.d/syscheck-banner.sh /etc/logrotate.d/syscheck /usr/local/bin/syscheck
 rm -rf "$SC_PREFIX"
 echo "removed the program, schedule, sudoers grant and login banner"
 
