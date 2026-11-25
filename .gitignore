@@ -1,0 +1,7 @@
+# Runtime state lives in /var/lib/syscheck and settings in /etc/syscheck on
+# each machine, never in the repository.
+*.log
+*.tmp
+runs/
+dist/
+.DS_Store

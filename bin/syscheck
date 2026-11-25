@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+# syscheck: the user-facing command.
+set -uo pipefail
+SC_PREFIX="${SC_PREFIX:-/opt/syscheck}"
+. "$SC_PREFIX/lib/common.sh"
+. "$SC_PREFIX/lib/settings.sh"
+
+cmd="${1:-status}"; shift || true
+
+if [ -t 1 ]; then B=$'\033[1m'; DIM=$'\033[2m'; R=$'\033[0m'; GRN=$'\033[32m'; RED=$'\033[31m'; YEL=$'\033[33m'
+else B=""; DIM=""; R=""; GRN=""; RED=""; YEL=""; fi
+
+die() { echo "syscheck: $*" >&2; exit 1; }
+
+# Re-run this same command as root (asks for the sudo password). Changing
+# settings is an administrator action; reading them is not.
+need_root() { [ "$(id -u)" = "0" ] || exec sudo "$SC_PREFIX/bin/syscheck" "$cmd" "$@"; }
+
+# Run a command as the analysis account, where the Claude login lives.
+as_user() {
+  local path="$SC_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  if [ "$(id -un)" = "$SC_USER" ]; then
+    env PATH="$path" "$@"
+  elif [ "$(id -u)" = "0" ]; then
+    runuser -u "$SC_USER" -- env HOME="$SC_HOME" USER="$SC_USER" LOGNAME="$SC_USER" PATH="$path" "$@"
+  else
+    sudo -u "$SC_USER" -H env PATH="$path" "$@"
+  fi
+}
+
+rerender_motd() {
+  [ -f "$SC_STATE" ] || return 0
+  "$SC_PREFIX/bin/motd-render.sh" > "$SC_MOTD.tmp" 2>/dev/null && chmod 0644 "$SC_MOTD.tmp" && mv -f "$SC_MOTD.tmp" "$SC_MOTD"
+  rm -f "$SC_MOTD.tmp"
+}
+
+apply_settings() {
+  "$SC_PREFIX/bin/apply.sh" || echo "${YEL}some settings could not be applied; see above${R}" >&2
+}
+
+# --- settings -------------------------------------------------------------------
+settings_table() {
+  local name var kind desc
+  while IFS='|' read -r name var kind desc; do
+    [ -n "$name" ] || continue
+    printf '  %-14s %-28s %s\n' "$name" "$(sc_setting_value "$var")" "${DIM}$desc${R}"
+  done <<<"$SC_SETTINGS"
+}
+
+set_one() {  # set_one <name> <value>   (root)
+  local row var kind val
+  row="$(sc_setting_row "$1")"; [ -n "$row" ] || die "unknown setting '$1' (see: syscheck get)"
+  var="$(echo "$row" | cut -d'|' -f2)"; kind="$(echo "$row" | cut -d'|' -f3)"
+  val="$(sc_setting_check "$kind" "$2")" || return 1
+  sc_conf_write "$var" "$val"
+  echo "$1 = $(sc_setting_value "$var")"
+}
+
+claude_status() {
+  local v j
+  v="$(as_user claude --version 2>/dev/null | head -1)"
+  if [ -z "$v" ]; then
+    echo "  Claude Code : ${RED}not installed${R} for $SC_USER  (syscheck claude install)"
+    return 1
+  fi
+  echo "  Claude Code : $v  (account: $SC_USER)"
+  j="$(as_user claude auth status --json 2>/dev/null)"
+  if [ "$(printf '%s' "$j" | jq -r '.loggedIn // false' 2>/dev/null)" = "true" ]; then
+    printf '  Logged in   : %syes%s (%s, %s plan, login valid until %s)\n' "$GRN" "$R" \
+      "$(printf '%s' "$j" | jq -r '.authMethod // "?"')" \
+      "$(printf '%s' "$j" | jq -r '.subscriptionType // .apiProvider // "?"')" \
+      "$(printf '%s' "$j" | jq -r '.loginExpiresAt // "?"' | cut -c1-10)"
+  else
+    echo "  Logged in   : ${RED}no${R}  (syscheck claude login)"
+    return 1
+  fi
+}
+
+settings_menu() {
+  local choice name var kind desc i val rows=()
+  while IFS='|' read -r name var kind desc; do [ -n "$name" ] && rows+=("$name|$var|$kind|$desc"); done <<<"$SC_SETTINGS"
+  while true; do
+    echo
+    echo "${B}syscheck settings${R}  ${DIM}$(hostname -s), version $SC_VERSION, saved to $SC_HOST_CONF${R}"
+    echo
+    i=0
+    for r in "${rows[@]}"; do
+      i=$((i+1)); IFS='|' read -r name var kind desc <<<"$r"
+      printf '  %2d) %-30s %s\n' "$i" "$desc" "${B}$(sc_setting_value "$var")${R}"
+    done
+    echo
+    printf '   n) Note on the login banner      %s\n' "${B}$(sc_note_get || true)${R}"
+    echo   "   m) Describe this machine for Claude (edit machine.md)"
+    echo   "   c) Claude: install, log in, log out, test"
+    echo   "   u) Check for a syscheck update"
+    echo   "   r) Run a check now"
+    echo   "   q) Quit"
+    echo
+    read -r -p "choose: " choice || return 0
+    case "$choice" in
+      q|Q|"") return 0 ;;
+      n|N)
+        read -r -p "note (empty clears it): " val || continue
+        sc_note_set "$val"; rerender_motd; echo "saved" ;;
+      m|M) "${EDITOR:-nano}" "$SC_ETC/machine.md" ;;
+      c|C) claude_menu ;;
+      u|U) "$SC_PREFIX/bin/upgrade.sh" --check ;;
+      r|R) "$SC_PREFIX/bin/run.sh"; echo; "$SC_PREFIX/bin/motd-render.sh" ;;
+      *)
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#rows[@]}" ]; then
+          IFS='|' read -r name var kind desc <<<"${rows[$((choice-1))]}"
+          echo "$desc. Now: $(sc_setting_value "$var")"
+          case "$kind" in user|disk) echo "  ('auto' to detect)";; services) echo "  ('default' for the built-in list)";; esac
+          read -r -p "new value (Enter keeps it): " val || continue
+          [ -n "$val" ] || continue
+          if set_one "$name" "$val"; then apply_settings; fi
+        else
+          echo "no such option"
+        fi ;;
+    esac
+  done
+}
+
+claude_menu() {
+  local c
+  echo; claude_status
+  echo
+  echo "  1) install or update Claude Code   2) log in   3) log out   4) send a test prompt"
+  read -r -p "choose (Enter to go back): " c || return 0
+  case "$c" in
+    1) claude_cmd install ;; 2) claude_cmd login ;; 3) claude_cmd logout ;; 4) claude_cmd test ;;
+  esac
+}
+
+claude_cmd() {
+  case "${1:-status}" in
+    status) claude_status ;;
+    install|update)
+      if as_user claude --version >/dev/null 2>&1; then
+        echo "updating Claude Code for $SC_USER..."; as_user claude update
+      else
+        echo "installing Claude Code for $SC_USER from claude.ai (the official installer)..."
+        as_user bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
+      fi ;;
+    login)
+      as_user claude --version >/dev/null 2>&1 || die "Claude Code is not installed for $SC_USER. Run: syscheck claude install"
+      echo "Logging in to Claude as $SC_USER. On a machine without a browser, open the"
+      echo "link it prints on any device and paste the code back here."
+      as_user claude auth login ;;
+    logout) as_user claude auth logout ;;
+    test)
+      echo "asking $SC_MODEL for a one-line reply (spend cap \$0.10)..."
+      as_user claude -p "Reply with exactly: syscheck can reach Claude" --model "$SC_MODEL" \
+        --max-budget-usd 0.10 --output-format json --no-session-persistence 2>&1 \
+        | jq -r '"  reply: \(.result // .error // "none")\n  cost:  $\(.total_cost_usd // 0)"' 2>/dev/null \
+        || echo "  the test failed; check: syscheck claude status" ;;
+    *) die "usage: syscheck claude {status|install|update|login|logout|test}" ;;
+  esac
+}
+
+case "$cmd" in
+  status|"")
+    "$SC_PREFIX/bin/motd-render.sh"
+    if [ -f "$SC_STATE" ]; then
+      echo "  state    : $SC_STATE"
+      if [ -f "$SC_LATEST/claude-stats.txt" ]; then echo "  claude   : $(head -1 "$SC_LATEST/claude-stats.txt")"; fi
+    else
+      echo "no run recorded yet. Start one with: syscheck run"
+    fi
+    ;;
+
+  report)
+    f="${1:-$SC_LATEST/report.md}"
+    [ -f "$f" ] || die "no report at $f"
+    if command -v glow >/dev/null; then glow -p "$f"
+    elif command -v batcat >/dev/null; then batcat --style=plain -l md "$f"
+    else less -R "$f"; fi
+    ;;
+
+  run)
+    echo "running the full check now (this takes a few minutes)..."
+    if [ "$(id -u)" = "0" ]; then "$SC_PREFIX/bin/run.sh"; else sudo "$SC_PREFIX/bin/run.sh"; fi
+    echo; "$SC_PREFIX/bin/motd-render.sh"
+    ;;
+
+  collect)
+    echo "collecting and applying the rules only; Claude is not called..."
+    if [ "$(id -u)" = "0" ]; then "$SC_PREFIX/bin/run.sh" --no-analysis; else sudo "$SC_PREFIX/bin/run.sh" --no-analysis; fi
+    echo; "$SC_PREFIX/bin/motd-render.sh"
+    ;;
+
+  logs|tail)   tail -f /var/log/syscheck.log ;;
+  runlog)      less -R "${1:-$SC_LATEST/00-run.log}" ;;
+  findings)
+    [ -s "$SC_LATEST/findings.tsv" ] || { echo "no findings: everything passed"; exit 0; }
+    awk -F'\t' '{printf "%-9s %-10s %s%s\n", toupper($1), $2, $3, ($4=="1"?"  [IMMINENT]":"")}' \
+      "$SC_LATEST/findings.tsv" ;;
+  metrics)     column -t -s$'\t' "$SC_LATEST/metrics.tsv" 2>/dev/null || cat "$SC_LATEST/metrics.tsv" ;;
+  trend)       cat "$SC_LATEST/99-trend.log" 2>/dev/null || echo "no trend data yet" ;;
+  history)     column -t -s$'\t' "$SC_HISTORY" 2>/dev/null || cat "$SC_HISTORY" ;;
+  summary)     cat "$SC_LATEST/SUMMARY.txt" 2>/dev/null || echo "no summary yet" ;;
+
+  full)
+    d="${SC_LATEST}/full"
+    [ -d "$d" ] || die "no full archive in the latest run"
+    if [ -z "${1:-}" ]; then
+      echo "untruncated archives in $(readlink -f "$SC_LATEST")/full:"
+      ls -1S "$d" | sed 's/\.full\.log\.gz$//' | awk '{printf "  %s\n", $0}'
+      echo; echo "usage: syscheck full <name>      e.g. syscheck full 41-journal"
+      echo "       syscheck grep <pattern>   search every archive"
+      exit 0
+    fi
+    f=$(ls "$d"/*"$1"*.full.log.gz 2>/dev/null | head -1)
+    [ -n "$f" ] || die "no archive matching '$1'"
+    zcat "$f" | ${PAGER:-less} -R ;;
+
+  grep)
+    [ -n "${1:-}" ] || die "usage: syscheck grep <pattern>"
+    d="${SC_LATEST}/full"
+    [ -d "$d" ] || die "no full archive in the latest run"
+    zgrep -i --color=always -H -- "$1" "$d"/*.full.log.gz 2>/dev/null \
+      | sed "s|$d/||" | ${PAGER:-less} -R ;;
+
+  ls|runs)     ls -1t "$SC_RUNS" 2>/dev/null | head -30 ;;
+  latest)      readlink -f "$SC_LATEST" ;;
+
+  alarm)
+    case "${1:-status}" in
+      stop|test|chime|status) "$SC_PREFIX/bin/alarm.sh" "$1" ;;
+      *) die "usage: syscheck alarm {stop|test|chime|status}" ;;
+    esac ;;
+
+  settings|setup|config)
+    need_root "$@"
+    settings_menu
+    ;;
+
+  get)
+    if [ -n "${1:-}" ]; then
+      row="$(sc_setting_row "$1")"; [ -n "$row" ] || die "unknown setting '$1'"
+      sc_setting_value "$(echo "$row" | cut -d'|' -f2)"; echo
+    else
+      echo "${B}settings${R} ${DIM}(change with: syscheck set <name> <value>, or syscheck settings)${R}"
+      settings_table
+      n="$(sc_note_get || true)"
+      if [ -n "$n" ]; then printf '  %-14s %s\n' "note" "$n"; fi
+    fi ;;
+
+  set)
+    [ $# -ge 2 ] || die "usage: syscheck set <name> <value>   (names: syscheck get)"
+    need_root "$@"
+    name="$1"; shift
+    set_one "$name" "$*" || exit 1
+    apply_settings
+    ;;
+
+  note)
+    if [ $# -eq 0 ]; then
+      n="$(sc_note_get || true)"; [ -n "$n" ] && echo "$n" || echo "no note set. Set one with: syscheck note \"text\""
+      exit 0
+    fi
+    need_root "$@"
+    if [ "$1" = "--clear" ] || [ "$1" = "-c" ]; then sc_note_set ""; echo "note cleared"
+    else sc_note_set "$*"; echo "note set: $(sc_note_get)"; fi
+    rerender_motd
+    ;;
+
+  claude)
+    case "${1:-status}" in status|test) : ;; *) [ "$(id -un)" = "$SC_USER" ] || need_root "$@" ;; esac
+    claude_cmd "${1:-status}" ;;
+
+  describe)
+    case "${1:-}" in
+      --edit)       need_root "$@"; "${EDITOR:-nano}" "$SC_ETC/machine.md" ;;
+      --regenerate) need_root "$@"
+                    [ -f "$SC_ETC/machine.md" ] && cp -f "$SC_ETC/machine.md" "$SC_ETC/machine.md.bak"
+                    "$SC_PREFIX/bin/describe.sh" > "$SC_ETC/machine.md"; chmod 0644 "$SC_ETC/machine.md"
+                    echo "rewrote $SC_ETC/machine.md (previous copy: machine.md.bak)" ;;
+      "")           cat "$SC_ETC/machine.md" 2>/dev/null || "$SC_PREFIX/bin/describe.sh" ;;
+      *)            die "usage: syscheck describe [--edit|--regenerate]" ;;
+    esac ;;
+
+  upgrade|update)
+    case "${1:-}" in --check|-c) : ;; *) need_root "$@" ;; esac
+    exec "$SC_PREFIX/bin/upgrade.sh" "$@" ;;
+
+  version|--version|-V)
+    echo "syscheck $SC_VERSION  ($SC_PREFIX, releases from github.com/$SC_REPO)"
+    if [ "${1:-}" = "--check" ]; then exec "$SC_PREFIX/bin/upgrade.sh" --check; fi ;;
+
+  uninstall)
+    need_root "$@"
+    exec "$SC_PREFIX/bin/uninstall.sh" "$@" ;;
+
+  apply)
+    need_root "$@"
+    apply_settings ;;
+
+  next)
+    if [ "${SC_ENABLED:-on}" = "on" ]; then echo "runs every day at $SC_SCHEDULE (root cron, /etc/cron.d/syscheck)"
+    else echo "the scheduled run is off. Turn it on with: syscheck set enabled on"; fi ;;
+
+  help|-h|--help)
+    cat <<H
+syscheck $SC_VERSION: scheduled health check for this machine, reviewed by Claude
+
+  syscheck                 current status (the same block the login banner shows)
+  syscheck report          read the latest full report
+  syscheck run             run the whole check now, including Claude
+  syscheck collect         run the check without Claude (rules only)
+
+  syscheck findings        threshold findings from the last run
+  syscheck metrics         every numeric reading from the last run
+  syscheck trend           last run against the one before it
+  syscheck history         rolling history across runs
+  syscheck summary         the orientation file Claude reads first
+  syscheck full [name]     list or read the untruncated archives
+  syscheck grep <pattern>  search every archive from the last run
+  syscheck runs            list recent runs
+  syscheck runlog          verbose log of the last run
+  syscheck logs            follow the cron log
+
+  syscheck settings        interactive settings menu
+  syscheck get [name]      show settings
+  syscheck set <name> <v>  change one, e.g. syscheck set schedule 04:30
+  syscheck note "text"     put your own line on the login banner
+  syscheck note --clear    remove it
+  syscheck describe        what Claude is told about this machine (--edit, --regenerate)
+
+  syscheck claude          Claude login status
+  syscheck claude install  install or update Claude Code for $SC_USER
+  syscheck claude login    log in (works over SSH: open the link it prints)
+  syscheck claude test     send a one-line test prompt
+
+  syscheck alarm test      prove the critical alarm can make noise
+  syscheck alarm stop      silence a sounding alarm
+  syscheck next            when the next run is scheduled
+
+  syscheck version         installed version (--check: is there a newer one)
+  syscheck upgrade         install the latest release (--check, or a version like v0.3.0)
+  syscheck uninstall       remove the program (--purge also removes settings and history)
+H
+    ;;
+  *) die "unknown command: $cmd (try: syscheck help)" ;;
+esac

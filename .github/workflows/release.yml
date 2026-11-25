@@ -1,0 +1,33 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches VERSION
+        run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+      - name: Checks
+        run: |
+          for f in install.sh bin/* lib/*.sh modules/*.sh tools/*.sh; do bash -n "$f"; done
+          shellcheck --severity=error --shell=bash install.sh bin/* lib/*.sh modules/*.sh tools/*.sh
+          tools/check-no-host-data.sh
+      - name: Build
+        run: |
+          V="$(cat VERSION)"
+          mkdir dist
+          git archive --format=tar.gz --prefix="syscheck-$V/" -o "dist/syscheck-$V.tar.gz" HEAD
+          (cd dist && sha256sum "syscheck-$V.tar.gz" > SHA256SUMS && cat SHA256SUMS)
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="$(cat VERSION)"
+          notes="$(awk -v v="## $V" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)"
+          gh release create "$GITHUB_REF_NAME" dist/* --title "syscheck $V" --notes "${notes:-syscheck $V}"

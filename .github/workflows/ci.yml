@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: for f in install.sh bin/* lib/*.sh modules/*.sh tools/*.sh; do bash -n "$f"; done
+      - name: ShellCheck (errors only)
+        run: shellcheck --severity=error --shell=bash install.sh bin/* lib/*.sh modules/*.sh tools/*.sh
+      - name: No host data in the repository
+        run: tools/check-no-host-data.sh
+
+  install:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install, configure, run, upgrade, uninstall
+        run: tools/ci-install-test.sh

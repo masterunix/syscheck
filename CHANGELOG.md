@@ -1,0 +1,40 @@
+# Changelog
+
+## 0.2.0
+
+First public release. syscheck now installs on any Ubuntu or Debian machine
+instead of the one it was written for.
+
+- **Settings**: `syscheck settings` menu, `syscheck get` and `syscheck set`
+  for schedule, model, effort, budget, analysis on/off, alarm, banner, disk,
+  account, watched services and retention. Saved per machine in
+  `/etc/syscheck/syscheck.conf`; changes apply immediately.
+- **Note line**: `syscheck note "text"` puts your own line on the login banner.
+- **Claude**: `syscheck claude install|login|logout|test|status`, and the
+  banner says when Claude is missing or logged out.
+- **Upgrades**: `syscheck upgrade` installs the latest GitHub release after
+  checking its SHA-256 checksum; `--check`, a specific version, or `--from` a
+  local archive. Settings and history are kept.
+- **Uninstall**: `syscheck uninstall`, with `--purge` to remove data too.
+- **Per-machine description**: `/etc/syscheck/machine.md` is generated from
+  the machine's own hardware and edited by the owner; nothing about any one
+  machine ships in the program.
+- **Detection**: the analysis account, disk (through LVM or LUKS), root
+  partition and PostgreSQL unit are detected instead of hardcoded.
+- **Data boundaries**: the analysis refuses ssh, scp, rsync, curl, wget, nc
+  and similar tools and is told never to contact another machine. CI rejects
+  host details in the repository.
+- **Security fixes**: the state directory is root-only for writing, and each
+  run directory is taken back from the analysis account before root writes to
+  it (a planted symlink could previously redirect root's writes). The
+  diagnostics wrapper refuses `journalctl --cursor-file` (which writes to any
+  path as root) and other file/image flags, never starts a pager, and resolves
+  symlinks before reading `/var/log`. Control characters are stripped from
+  Claude's banner message.
+- **Fixes**: per-host settings were overridden by a second read of the
+  defaults; every run-log line was written twice; `sensors-detect` now runs
+  only with `--detect-sensors`.
+
+## 0.1.0
+
+Initial version, written for one specific machine.

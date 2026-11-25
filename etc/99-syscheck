@@ -1,0 +1,6 @@
+#!/bin/sh
+# Print the latest syscheck result at login.
+# Deliberately trivial: this runs on every SSH connection, so it does no work
+# beyond cat-ing a file that run.sh already rendered.
+[ -r /var/lib/syscheck/motd ] && cat /var/lib/syscheck/motd
+exit 0
