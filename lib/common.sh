@@ -82,7 +82,7 @@ sc_emit() {   # sc_emit <logfile> <label> <cmdline> <tmpfile>
     echo "\$ $cmdline"
     if [ "$n" -gt "${SC_FULL_MAX_LINES:-20000}" ]; then
       # Even the archive needs a backstop: one runaway probe must not fill a
-      # disk that is the only disk in the machine.
+      # disk that may be the only one in the machine.
       head -"${SC_FULL_MAX_LINES:-20000}" "$tmp"
       echo "!! archive truncated at ${SC_FULL_MAX_LINES:-20000} of $n lines"
     else

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# This box is reachable over SSH, Samba, nginx and a Cloudflare tunnel, so the
-# security surface is worth a nightly look.
+# Login attempts, privilege use, exposed services and patch state.
 mod_security() {
   local L="$SC_RUN_DIR/80-security.log"
   local since="${SC_SINCE:-24 hours ago}"
@@ -26,7 +25,7 @@ mod_security() {
   local failed_auth
   failed_auth=$(sc_num "$(journalctl -u ssh -u sshd --since "$since" --no-pager 2>/dev/null | grep -icE 'failed password|invalid user')")
   sc_metric "ssh_failed_auth" "$failed_auth"
-  if   [ "${failed_auth:-0}" -ge 500 ]; then sc_finding major security "$failed_auth failed SSH auth attempts in the last day - this box is being actively brute-forced"
+  if   [ "${failed_auth:-0}" -ge 500 ]; then sc_finding major security "$failed_auth failed SSH auth attempts in the last day - this machine is being actively brute-forced"
   elif [ "${failed_auth:-0}" -ge 50 ];  then sc_finding minor security "$failed_auth failed SSH auth attempts in the last day - routine internet background noise, but worth knowing"
   fi
 

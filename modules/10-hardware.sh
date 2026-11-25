@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Identity, firmware, CPU, and the thermal picture.
-# On a 2012 SFF box the two things that actually kill it are heat and the disk.
+# On older machines the two things that most often kill them are heat and the disk.
 mod_hardware() {
   local L="$SC_RUN_DIR/10-hardware.log"
 
@@ -15,7 +15,7 @@ mod_hardware() {
       'dmidecode -t memory 2>/dev/null | grep -E "Size:|Speed:|Manufacturer:|Part Number:|Locator:|Type:|Rank" | grep -v "No Module"'
     sc_sh "$L" "chassis" 'dmidecode -t chassis 2>/dev/null | grep -E "Type:|State:|Boot-up|Power Supply|Thermal"'
 
-    # BIOS date tells us how far behind firmware is; on Ivy Bridge that matters
+    # BIOS date tells us how far behind firmware is; on older CPUs that matters
     # for microcode mitigations more than for stability.
     local bios_date
     bios_date=$(dmidecode -s bios-release-date 2>/dev/null)
@@ -30,8 +30,8 @@ mod_hardware() {
   sc_sh "$L" "microcode" 'grep -m1 microcode /proc/cpuinfo'
 
   # Thermal throttling counters. Non-zero and climbing means the heatsink is
-  # clogged with 13 years of dust, which is the single most common failure
-  # mode for a box of this vintage.
+  # clogged with dust, which is the most common failure mode for an older
+  # machine.
   local throttle=0 t
   for t in /sys/devices/system/cpu/cpu*/thermal_throttle/core_throttle_count; do
     [ -r "$t" ] || continue
@@ -62,7 +62,7 @@ mod_hardware() {
     done
   done
 
-  # coretemp per-core via hwmon, plus the HP EC sensors (fan speed lives here)
+  # coretemp per-core via hwmon, plus any board sensors (fan speed lives here)
   local h
   for h in /sys/class/hwmon/hwmon*; do
     local name; name=$(cat "$h/name" 2>/dev/null) || continue

@@ -35,7 +35,7 @@ mod_services() {
   elif [ "${churn:-0}" -ge 5 ];  then sc_finding minor services "$worst has restarted $churn times"
   fi
 
-  # Per-service errors for the units that actually matter on this box.
+  # Per-service errors for common server daemons (or SC_WATCH_SERVICES).
   local S="$SC_RUN_DIR/52-service-logs.log"
   local svc
   for svc in ${SC_WATCH_SERVICES:-ssh sshd nginx docker ${SC_PG_UNIT:-postgresql} plexmediaserver ollama tailscaled cloudflared smbd cron systemd-timesyncd}; do

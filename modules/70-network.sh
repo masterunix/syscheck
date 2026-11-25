@@ -63,13 +63,13 @@ mod_network() {
     sc_finding major network "No route to the internet (1.1.1.1 unreachable)"
   fi
 
-  # Clock drift points at a dead CMOS battery, which on a 2012 board is likely.
+  # Clock drift can point at a dead CMOS battery on an older board.
   local synced
   synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
   sc_metric "ntp_synced" "${synced:-unknown}"
-  [ "$synced" = "no" ] && sc_finding minor power "Clock is not NTP-synchronised - on a board this age, suspect the CMOS battery"
+  [ "$synced" = "no" ] && sc_finding minor power "Clock is not NTP-synchronised - on an older board, suspect the CMOS battery"
 
-  # Overlay networks this box depends on
+  # Overlay networks, when present
   command -v tailscale >/dev/null && sc_sh "$L" "tailscale" 'timeout 10 tailscale status 2>&1 | head -12'
   systemctl is-active cloudflared >/dev/null 2>&1 && \
     sc_sh "$L" "cloudflared tunnel" "journalctl -u cloudflared --since '${SC_SINCE:-24 hours ago}' --no-pager -o cat 2>/dev/null | grep -iE 'error|failed|disconnect|reconnect' | tail -12 || echo none"

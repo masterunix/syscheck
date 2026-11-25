@@ -27,10 +27,10 @@ mod_memory() {
   sc_metric "swap_used_kb" "$swap_used"
 
   [ "$used_pct" -ge 95 ] && sc_finding major memory "Memory ${used_pct}% used with only $(( avail / 1024 ))MB available"
-  [ "$swap_pct" -ge 60 ] && sc_finding major memory "Swap ${swap_pct}% used - the box is paging hard, and on a spinning disk that is brutal"
+  [ "$swap_pct" -ge 60 ] && sc_finding major memory "Swap ${swap_pct}% used - the machine is paging hard"
   [ "$swap_pct" -ge 25 ] && [ "$swap_pct" -lt 60 ] && sc_finding minor memory "Swap ${swap_pct}% used"
 
-  # OOM kills. systemd-oomd is running on this box so check both sources.
+  # OOM kills, from the kernel and from systemd-oomd where it runs.
   local O="$SC_RUN_DIR/31-oom.log"
   sc_sh "$O" "kernel OOM kills (this boot)" \
     'journalctl -k -b --no-pager 2>/dev/null | grep -iE "out of memory|oom-kill|killed process" | tail -40 || echo none'
@@ -42,7 +42,7 @@ mod_memory() {
   sc_metric "oom_kills" "$oom_count"
   [ "${oom_count:-0}" -gt 0 ] && sc_finding major memory "$oom_count OOM kill events since boot - something is over-committing RAM"
 
-  # Memory pressure stall information: the most honest signal that the box is
+  # Memory pressure stall information: the most honest signal that the machine is
   # thrashing, and it exists on this kernel.
   sc_sh "$L" "PSI pressure" \
     'for p in cpu memory io; do printf "%-8s %s\n" "$p" "$(head -1 /proc/pressure/$p 2>/dev/null)"; done'

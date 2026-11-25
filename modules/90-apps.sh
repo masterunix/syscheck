@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The workloads this box actually exists to run.
+# Common workloads, each checked only when it is present.
 mod_apps() {
   # The cluster unit is named after the major version (postgresql@16-main).
   SC_PG_UNIT="$(systemctl list-units --type=service --state=active --no-legend --plain 'postgresql@*' 2>/dev/null | awk '{print $1; exit}')"
@@ -44,7 +44,7 @@ mod_apps() {
       sc_finding critical apps "PostgreSQL reported corruption or a PANIC - database integrity is at risk" 1
   fi
 
-  # --- plex / ollama / n8n ---
+  # --- plex / ollama ---
   systemctl is-active plexmediaserver >/dev/null 2>&1 && \
     sc_sh "$L" "plex" "systemctl status plexmediaserver --no-pager -l 2>/dev/null | head -12"
   systemctl is-active ollama >/dev/null 2>&1 && {

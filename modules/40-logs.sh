@@ -40,9 +40,9 @@ mod_logs() {
   sc_metric "kernel_oops" "$oops"
   sc_metric "segfaults"  "$segv"
 
-  # ATA resets on the only disk in the machine are a pre-failure signature.
+  # Repeated ATA resets on a disk are a pre-failure signature.
   if [ "${ata_err:-0}" -ge 20 ]; then
-    sc_finding critical kernel "$ata_err SATA link errors / command failures in the last day - the link to the only disk in this box is failing" 1
+    sc_finding critical kernel "$ata_err SATA link errors / command failures in the last day - the link to the disk is failing" 1
   elif [ "${ata_err:-0}" -gt 0 ]; then
     sc_finding major kernel "$ata_err SATA link errors in the last day - check the cable, then the drive"
   fi

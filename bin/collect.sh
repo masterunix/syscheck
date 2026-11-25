@@ -144,7 +144,7 @@ fi
 run_module mod_trend "trend vs previous run"
 
 # Compress the full archive. It is written once and read rarely, compresses
-# about 10:1, and this machine's only disk is the resource worth protecting.
+# about 10:1, and the disk is the resource worth protecting.
 # zcat/zgrep read it fine when something actually needs digging into.
 if [ -d "$SC_RUN_DIR/full" ]; then
   before=$(du -sk "$SC_RUN_DIR/full" 2>/dev/null | cut -f1)

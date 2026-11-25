@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compare tonight against the previous run. On hardware this old the *rate of
+# Compare tonight against the previous run. On aging hardware the *rate of
 # change* says far more than any single reading: 4 reallocated sectors is a
 # worn drive, 4 more since yesterday is a drive that will not survive the week.
 mod_trend() {

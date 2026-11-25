@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Docker: container health, restart loops, and how much of the 500GB disk the
+# Docker: container health, restart loops, and how much of the disk the
 # images and volumes have quietly eaten.
 mod_docker() {
   command -v docker >/dev/null || return 0

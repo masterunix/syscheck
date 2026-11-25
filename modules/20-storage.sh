@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Disk health. This is the module that matters most: sda is a WD5000AAKX, a
-# spinning 500GB drive from roughly 2012, and it is the *only* storage in the
-# box. When it goes, everything goes with it.
+# Disk health. This is the module that matters most: on a machine with one
+# disk and no redundancy, when the disk goes everything goes with it.
 mod_storage() {
   local L="$SC_RUN_DIR/20-storage.log"
   local S="$SC_RUN_DIR/21-smart.log"
