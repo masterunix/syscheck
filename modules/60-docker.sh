@@ -5,6 +5,13 @@ mod_docker() {
   command -v docker >/dev/null || return 0
   local L="$SC_RUN_DIR/60-docker.log"
 
+  # With socket activation, asking a stopped daemon anything starts it. A
+  # health check must not change what is running, so skip it instead.
+  if ! systemctl is-active --quiet docker 2>/dev/null; then
+    echo "docker is installed but its service is not running; skipped" >> "$L"
+    return 0
+  fi
+
   docker info >/dev/null 2>&1 || { echo "docker daemon unreachable" >> "$L"
     sc_finding major docker "Docker daemon is not responding"; return 0; }
 

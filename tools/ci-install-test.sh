@@ -42,7 +42,7 @@ test "$(stat -c %U /var/lib/syscheck/latest/)" = root
 # the diagnostics wrapper refuses flags that write files as root
 if sudo -n /opt/syscheck/bin/priv-read.sh journal --cursor-file=/tmp/sc-pwn -n1; then exit 1; fi
 test ! -e /tmp/sc-pwn
-ln -sf /etc/shadow /var/log/sc-link
+sudo ln -sf /etc/shadow /var/log/sc-link
 if sudo -n /opt/syscheck/bin/priv-read.sh readlog /var/log/sc-link; then exit 1; fi
 sudo rm -f /var/log/sc-link
 

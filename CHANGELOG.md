@@ -38,7 +38,10 @@ instead of the one it was written for.
   symlinks before reading `/var/log`. Control characters are stripped from
   Claude's banner message.
 - **Fixes**: per-host settings were overridden by a second read of the
-  defaults; every run-log line was written twice; `sensors-detect` now runs
+  defaults; the clean-shutdown check counted the boot list's header as a boot,
+  missed shutdowns whose journal ended early, and treated hibernation as a
+  crash; failed units were listed by their bullet; Docker is no longer
+  started by its own health check when it is socket-activated; every run-log line was written twice; `sensors-detect` now runs
   only with `--detect-sensors`.
 
 ## 0.1.0

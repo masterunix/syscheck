@@ -66,16 +66,32 @@ mod_logs() {
   # a boot is unreliable: any service stuck in a restart loop floods the journal
   # and pushes the real shutdown sequence out of the window. Server-side
   # --grep over the whole boot has no such blind spot.
-  local dirty_boots=0 checked=0 b hits
+  local dirty_boots=0 checked=0 b hits sleeps last_sleep
   echo "### boots that ended without a recorded clean shutdown:" >> "$U"
-  for b in $(journalctl --list-boots --no-pager 2>/dev/null | head -n -1 | tail -8 | awk '{print $1}'); do
+  # Previous boots only (negative offsets); newer journalctl prints a header.
+  for b in $(journalctl --list-boots --no-pager 2>/dev/null | awk '$1 ~ /^-[0-9]+$/ {print $1}' | tail -8); do
     checked=$(( checked + 1 ))
-    hits=$(journalctl -b "$b" _PID=1 --no-pager \
-             --grep='Reached target shutdown.target|Shutting down\.' 2>/dev/null \
+    # Shutdown markers from PID 1 and logind. The journald messages ("Journal
+    # stopped") are not used: journald restarts mid-boot during upgrades.
+    hits=$(journalctl -b "$b" _PID=1 + SYSLOG_IDENTIFIER=systemd-logind --no-pager \
+             --grep='Reached target (shutdown\.target|System Shutdown|System Power Off|System Reboot)|Shutting down\.|System is (powering down|rebooting|halting)|shutdown-ramfs' 2>/dev/null \
            | grep -cE '^[A-Z][a-z]{2} ')     # real log lines only, not "-- No entries --"
     hits=$(sc_num "$hits")
+    # A laptop that hibernates (or suspends until the battery runs out) ends
+    # its boot without a shutdown, but nothing crashed. The kernel logs the
+    # entry into the sleep state as the boot's last act.
+    sleeps=$(journalctl -b "$b" -k --no-pager \
+               --grep='PM: hibernation: hibernation entry|PM: suspend entry' 2>/dev/null \
+             | grep -cE '^[A-Z][a-z]{2} ')
+    sleeps=$(sc_num "$sleeps")
+    last_sleep=$(journalctl -b "$b" -k --no-pager -o cat \
+               --grep='PM: hibernation: hibernation entry|PM: suspend entry|PM: suspend exit|PM: hibernation: hibernation exit' 2>/dev/null | tail -1)
     if [ "$hits" -gt 0 ]; then
       echo "  boot $b: clean ($hits shutdown markers)" >> "$U"
+    elif [ "$sleeps" -gt 0 ] && echo "$last_sleep" | grep -q 'hibernation entry'; then
+      echo "  boot $b: ended in hibernation (not a crash)" >> "$U"
+    elif [ "$sleeps" -gt 0 ] && echo "$last_sleep" | grep -q 'suspend entry'; then
+      echo "  boot $b: ended while suspended - the battery or power likely ran out (not a crash)" >> "$U"
     else
       echo "  boot $b: NO clean shutdown - hard power-off, power loss, or lockup" >> "$U"
       dirty_boots=$(( dirty_boots + 1 ))
